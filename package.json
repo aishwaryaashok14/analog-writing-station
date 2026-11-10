@@ -1,0 +1,12 @@
+{
+  "name": "analog-station",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Fuzukue — a quiet analog writing desk by @aishashok14",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "check": "node --check src/main.js && node --check src/paper.js && node --check src/ritual.js && node --check src/recap.js && node --check src/audio.js"
+  }
+}
