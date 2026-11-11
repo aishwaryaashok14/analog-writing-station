@@ -151,6 +151,12 @@ export const audio = {
   drip() { tone({ freq: 900, to: 1700, dur: 0.05, gain: 0.07 }); tone({ freq: 500, to: 300, dur: 0.12, gain: 0.04, delay: 0.04 }); },
   wipe() { burst({ dur: 0.26, freq: 1300, to: 700, q: 0.7, gain: 0.09, attack: 0.05 }); },
   seat() { burst({ dur: 0.02, freq: 2600, q: 2, gain: 0.14 }); tone({ freq: 210, to: 140, dur: 0.07, gain: 0.14 }); },
+  crumple() {
+    for (let i = 0; i < 10; i++) {
+      burst({ dur: 0.03 + Math.random() * 0.07, freq: 1700 + Math.random() * 3400, q: 1.1, gain: 0.05 + Math.random() * 0.1, delay: i * 0.052 + Math.random() * 0.03 });
+    }
+    burst({ dur: 0.5, type: 'bandpass', freq: 2400, to: 900, q: 0.5, gain: 0.07, attack: 0.05 });
+  },
   paper() { burst({ dur: 0.55, type: 'bandpass', freq: 900, to: 2600, q: 0.5, gain: 0.1, attack: 0.12 }); },
   stamp() { tone({ freq: 120, to: 55, dur: 0.16, gain: 0.5 }); burst({ dur: 0.05, type: 'lowpass', freq: 700, gain: 0.3 }); },
 

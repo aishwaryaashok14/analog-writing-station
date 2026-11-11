@@ -8,10 +8,23 @@
 export const SHEET = { w: 620, h: 820, ml: 62, mr: 54, top: 118, gap: 40, lines: 17 };
 
 const S = 2;                 // canvas pixels per sheet unit
-const PX = 28;               // handwriting size
-const FONT = `${PX}px "La Belle Aurore", "Klee One", "Hiragino Maru Gothic ProN", cursive`;
-const PAD = 18, BASE = 46, GH = 72;   // glyph cell: side padding, baseline, height
 const CAPACITY = 1100;       // glyphs in a full converter
+
+// The hand can be written larger (a phone held at arm's length needs it). Everything
+// that belongs to the handwriting scales with K; the sheet itself stays the same size,
+// so a larger hand simply means fewer, taller lines.
+let K = 1;
+let PX, FONT, PAD, BASE, GH;          // size, font, and the glyph cell: side padding, baseline, height
+function setHand(k) {
+  K = k;
+  PX = 28 * k;
+  FONT = `${PX}px "La Belle Aurore", "Klee One", "Hiragino Maru Gothic ProN", cursive`;
+  PAD = Math.ceil(18 * k); BASE = Math.ceil(46 * k); GH = Math.ceil(72 * k);
+  SHEET.gap = Math.round(40 * k);
+  SHEET.top = 78 + SHEET.gap;
+  SHEET.lines = Math.floor((SHEET.h - 52 - SHEET.top) / SHEET.gap) + 1;
+}
+setHand(1);
 
 const rnd = (a, b) => a + Math.random() * (b - a);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -101,11 +114,12 @@ export function createWriter(cb) {
   const ink = { color: '#1b3a6b', level: 0 };
   const pen = { x: SHEET.ml, y: SHEET.top, down: false };
 
-  const lineOf = (i) => (lines[i] ||= { off: rnd(-1.1, 1.1), slope: rnd(-0.006, 0.006), ph: rnd(0, 6.28), start: SHEET.ml + rnd(-3, 6) });
-  const by = (i, xx) => { const L = lineOf(i); return SHEET.top + i * SHEET.gap + L.off + L.slope * (xx - SHEET.ml) + Math.sin(xx * 0.011 + L.ph) * 0.8; };
+  const lineOf = (i) => (lines[i] ||= { off: rnd(-1.1, 1.1) * K, slope: rnd(-0.006, 0.006), ph: rnd(0, 6.28), start: SHEET.ml + rnd(-3, 6) });
+  const by = (i, xx) => { const L = lineOf(i); return SHEET.top + i * SHEET.gap + L.off + L.slope * (xx - SHEET.ml) + Math.sin(xx * 0.011 + L.ph) * 0.8 * K; };
   const speed = () => { const q = queue.length; return q > 40 ? 0.08 : q > 14 ? 0.28 : q > 6 ? 0.5 : q > 2 ? 0.78 : 1; };
 
-  function attach(el) {
+  function attach(el, hand = 1) {
+    setHand(hand);
     paper = document.createElement('canvas');
     const wet = document.createElement('canvas');
     wet.className = 'wet';
@@ -117,7 +131,7 @@ export function createWriter(cb) {
     el.append(paper, wet);
     glyphs = []; lines = []; line = 0; x = lineOf(0).start;
     cur = null; run = null; afterStrike = false; wetList = [];
-    pen.x = x; pen.y = by(0, x) - 4; pen.down = false;
+    pen.x = x; pen.y = by(0, x) - 4 * K; pen.down = false;
     return paper;
   }
 
@@ -136,12 +150,12 @@ export function createWriter(cb) {
 
     // fountain-pen shading: thin at the top of a stroke, pooled where it ends
     g.globalCompositeOperation = 'source-atop';
-    const lg = g.createLinearGradient(0, BASE - 22, 0, BASE + 9);
+    const lg = g.createLinearGradient(0, BASE - 22 * K, 0, BASE + 9 * K);
     lg.addColorStop(0, 'rgba(255,255,255,.2)');
     lg.addColorStop(0.55, 'rgba(255,255,255,0)');
     lg.addColorStop(1, 'rgba(0,0,0,.3)');
     g.fillStyle = lg; g.fillRect(0, 0, cw, GH);
-    const bx = PAD + rnd(0, adv), byy = BASE - rnd(2, 14), br = rnd(7, 15);
+    const bx = PAD + rnd(0, adv), byy = BASE - rnd(2, 14) * K, br = rnd(7, 15) * K;
     const rg = g.createRadialGradient(bx, byy, 0, bx, byy, br);
     rg.addColorStop(0, 'rgba(0,0,0,.26)'); rg.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = rg; g.fillRect(0, 0, cw, GH);
@@ -154,9 +168,9 @@ export function createWriter(cb) {
       for (let i = 0; i < n; i++) {
         g.globalAlpha = rnd(0.3, 0.9);
         g.save();
-        g.translate(rnd(PAD - 4, PAD + adv + 4), rnd(BASE - 26, BASE + 10));
+        g.translate(rnd(PAD - 4, PAD + adv + 4), rnd(BASE - 26 * K, BASE + 10 * K));
         g.rotate(rnd(-1.1, -0.5));
-        g.fillRect(-12, 0, 24, rnd(0.5, 1.4 + starve));
+        g.fillRect(-12 * K, 0, 24 * K, rnd(0.5, 1.4 + starve) * K);
         g.restore();
       }
       g.globalAlpha = 1;
@@ -176,14 +190,14 @@ export function createWriter(cb) {
       if (t >= 0) { if (l < 0) l = cx; r = cx; top[cx] = t / S; bot[cx] = b / S; } else top[cx] = -1;
     }
     if (l < 0) { l = PAD; r = PAD + 1; }
-    let lt = BASE - 8, lb = BASE;
+    let lt = BASE - 8 * K, lb = BASE;
     for (let cx = l; cx <= r; cx++) { if (top[cx] < 0) { top[cx] = lt; bot[cx] = lb; } else { lt = top[cx]; lb = bot[cx]; } }
 
     const sc = rnd(0.965, 1.035);
     return {
       kind, ch, line, x, struck: false,
       w: adv * sx * sc,
-      y: by(line, x) + rnd(-0.7, 0.7),
+      y: by(line, x) + rnd(-0.7, 0.7) * K,
       rot: rnd(-0.03, 0.03), sx, sc,
       alpha: 0.9 - starve * 0.4,
       ph: rnd(0, 6.28),
@@ -221,7 +235,7 @@ export function createWriter(cb) {
 
   /* strike-through */
 
-  const sy = (r, xx) => r.y + r.slope * (xx - r.x0) + Math.sin(xx * 0.14 + r.ph) * 0.8 + Math.sin(xx * 0.043 + r.ph * 1.7) * 1.5;
+  const sy = (r, xx) => r.y + r.slope * (xx - r.x0) + (Math.sin((xx * 0.14) / K + r.ph) * 0.8 + Math.sin((xx * 0.043) / K + r.ph * 1.7) * 1.5) * K;
 
   function strokeRun(c2, r, a, b, off = 0) {
     const n = Math.max(1, Math.ceil(Math.abs(b - a) / 2.5));
@@ -266,7 +280,7 @@ export function createWriter(cb) {
     line++;
     x = lineOf(line).start;
     afterStrike = false;
-    cur = { type: 'move', op, t: 0, dur: 190 * speed() + 30, from: [pen.x, pen.y], to: [x, by(Math.min(line, SHEET.lines - 1), x) - 5] };
+    cur = { type: 'move', op, t: 0, dur: 190 * speed() + 30, from: [pen.x, pen.y], to: [x, by(Math.min(line, SHEET.lines - 1), x) - 5 * K] };
   }
 
   function start(op) {
@@ -279,9 +293,9 @@ export function createWriter(cb) {
     if (ch === ' ' || ch === ' ' || ch === '\t') {
       const room = SHEET.w - SHEET.mr - x;
       const next = peekWord();
-      const need = next == null ? 58 : next;
+      const need = next == null ? 58 * K : next;
       if (x > SHEET.ml + 40 && room < need + 8) return startBreak(op, 'wrap');
-      const w = rnd(8.5, 11.5);
+      const w = rnd(8.5, 11.5) * K;
       glyphs.push({ kind: 'space', ch: ' ', line, x, w, struck: false });
       x += w;
       afterStrike = false;
@@ -292,7 +306,7 @@ export function createWriter(cb) {
     if (ink.level <= 0) return runDry(op);
 
     const adv = measure(ch);
-    if (afterStrike) { x += rnd(5, 9); afterStrike = false; }
+    if (afterStrike) { x += rnd(5, 9) * K; afterStrike = false; }
 
     // out of room in the middle of a word: hyphenate and carry on below
     if (x + adv * 0.86 > SHEET.w - 20 && x > SHEET.ml + 20) {
@@ -308,10 +322,10 @@ export function createWriter(cb) {
 
     const g = buildGlyph(ch, x + adv > SHEET.w - SHEET.mr ? 0.86 : 1);
     glyphs.push(g);
-    x += g.w + rnd(-0.3, 0.5);
-    ink.level = Math.max(0, ink.level - (0.35 + adv / 20) / CAPACITY);
+    x += g.w + rnd(-0.3, 0.5) * K;
+    ink.level = Math.max(0, ink.level - (0.35 + adv / (20 * K)) / CAPACITY);
     cb.ink?.(ink.level);
-    cur = { type: 'char', op, g, t: 0, p: 0, dur: (60 + adv * 3.4) * speed() };
+    cur = { type: 'char', op, g, t: 0, p: 0, dur: (60 + (adv * 3.4) / K) * speed() };
   }
 
   function startStrike(op) {
@@ -325,18 +339,18 @@ export function createWriter(cb) {
     const adjacent = run && run.line === g.line && run.idx === i + 1;
     if (g.kind === 'space' && !adjacent) { return gap(op, 14); }
     if (!adjacent) {
-      const x0 = g.x + g.w + rnd(1, 4);
+      const x0 = g.x + g.w + rnd(1, 4) * K;
       run = {
         line: g.line, x0, left: x0, idx: i, count: 0,
-        y: by(g.line, x0) - rnd(6, 8.5),
-        slope: rnd(-0.035, 0.035), ph: rnd(0, 6.28), wd: rnd(1.5, 2), color: ink.color,
+        y: by(g.line, x0) - rnd(6, 8.5) * K,
+        slope: rnd(-0.035, 0.035), ph: rnd(0, 6.28), wd: rnd(1.5, 2) * K, color: ink.color,
       };
     }
     run.idx = i;
     run.count++;
     const more = queue.length && queue[0].type === 'strike';
-    const to = Math.min(run.left, g.x - (more ? 0 : rnd(1.5, 4)));
-    cur = { type: 'strike', op, r: run, from: run.left, to, xx: run.left, off: 0, t: 0, dur: Math.max(26, (run.left - to) * 4.4 * speed()) };
+    const to = Math.min(run.left, g.x - (more ? 0 : rnd(1.5, 4) * K));
+    cur = { type: 'strike', op, r: run, from: run.left, to, xx: run.left, off: 0, t: 0, dur: Math.max(26, ((run.left - to) * 4.4 * speed()) / K) };
   }
 
   // a long crossing-out gets a second, firmer pass
@@ -345,7 +359,7 @@ export function createWriter(cb) {
     if (Math.random() > 0.6) return;
     const a = run.left + rnd(0, 4), b = run.x0 + rnd(-3, 2);
     const r = { ...run, ph: run.ph + 2.1, slope: run.slope + rnd(-0.015, 0.015) };
-    cur = { type: 'strike', second: true, r, from: a, to: b, xx: a, off: rnd(1.8, 3) * (Math.random() < 0.5 ? -1 : 1), t: 0, dur: Math.max(110, (b - a) * 1.7) };
+    cur = { type: 'strike', second: true, r, from: a, to: b, xx: a, off: rnd(1.8, 3) * K * (Math.random() < 0.5 ? -1 : 1), t: 0, dur: Math.max(110, ((b - a) * 1.7) / K) };
   }
 
   function step(c, p) {
@@ -364,7 +378,7 @@ export function createWriter(cb) {
     if (c.type === 'move') {
       const e = ease(p);
       pen.x = c.from[0] + (c.to[0] - c.from[0]) * e;
-      pen.y = c.from[1] + (c.to[1] - c.from[1]) * e - Math.sin(p * Math.PI) * 6;
+      pen.y = c.from[1] + (c.to[1] - c.from[1]) * e - Math.sin(p * Math.PI) * 6 * K;
       pen.down = false;
       return 0;
     }
@@ -419,7 +433,7 @@ export function createWriter(cb) {
       if (idle > 130) pen.down = false;
       if (idle > 130 && !paused) {
         // rest just past the last letter, ready for the next
-        const ty = by(Math.min(line, SHEET.lines - 1), x) - 5;
+        const ty = by(Math.min(line, SHEET.lines - 1), x) - 5 * K;
         pen.x += (x + 3 - pen.x) * 0.2; pen.y += (ty - pen.y) * 0.2;
       }
     }
@@ -480,6 +494,9 @@ export function createWriter(cb) {
     get busy() { return !!cur || queue.length > 0; },
     get blank() { return glyphs.length === 0; },
     get canvas() { return paper; },
+    /** baseline of the line being written, in sheet units — the camera follows this on a phone */
+    get lineY() { return SHEET.top + Math.min(line, SHEET.lines - 1) * SHEET.gap; },
+    get hand() { return K; },
     text() {
       let s = '';
       for (const g of glyphs) {
@@ -490,4 +507,83 @@ export function createWriter(cb) {
     },
     stampPos, stamp,
   };
+}
+
+/* ───────────── crumpling ───────────── */
+
+/** Press creases into a sheet's own canvas, so they travel with it (and into a saved image). */
+export function crease(canvas) {
+  const c = canvas.getContext('2d');
+  const { w, h } = SHEET;
+  c.save();
+  c.lineCap = 'round'; c.lineJoin = 'round';
+  // a few facets catch the light differently
+  for (let i = 0; i < 9; i++) {
+    const x = rnd(0, w), y = rnd(0, h);
+    c.beginPath();
+    c.moveTo(x + rnd(-190, 190), y + rnd(-190, 190));
+    c.lineTo(x + rnd(-190, 190), y + rnd(-190, 190));
+    c.lineTo(x + rnd(-190, 190), y + rnd(-190, 190));
+    c.closePath();
+    c.fillStyle = Math.random() < 0.5 ? 'rgba(255,253,244,.2)' : 'rgba(120,98,62,.07)';
+    c.fill();
+  }
+  // each crease is a shadow with a highlight beside it
+  for (let i = 0; i < 15; i++) {
+    const pts = [];
+    let x = rnd(-20, w + 20), y = rnd(-20, h + 20), a = rnd(0, Math.PI * 2);
+    const n = 3 + Math.floor(rnd(0, 4));
+    for (let k = 0; k < n; k++) { pts.push([x, y]); a += rnd(-0.7, 0.7); const len = rnd(70, 230); x += Math.cos(a) * len; y += Math.sin(a) * len; }
+    for (const [dx, col, lw] of [[0, 'rgba(96,74,44,.2)', 1.1], [1.3, 'rgba(255,255,250,.6)', 0.9]]) {
+      c.strokeStyle = col; c.lineWidth = lw;
+      c.beginPath();
+      pts.forEach(([px, py], k) => (k ? c.lineTo(px + dx, py + dx) : c.moveTo(px + dx, py + dx)));
+      c.stroke();
+    }
+  }
+  c.restore();
+}
+
+/** A crumpled ball of this sheet: folded facets, with scraps of its real ink showing. */
+export function ballOf(sheetCanvas, size = 84) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size * S;
+  const g = c.getContext('2d');
+  g.scale(S, S);
+  g.translate(size / 2, size / 2);
+  const R = size / 2 - 7, n = 13, rim = [];
+  for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2, r = R * rnd(0.82, 1.06); rim.push([Math.cos(a) * r, Math.sin(a) * r]); }
+  g.beginPath();
+  rim.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+  g.closePath();
+  g.save();
+  g.clip();
+  g.fillStyle = '#ece3cf';
+  g.fillRect(-size, -size, size * 2, size * 2);
+  // scraps of the page itself, turned every which way
+  for (let i = 0; i < 6; i++) {
+    g.save();
+    g.rotate(rnd(0, Math.PI * 2));
+    g.globalAlpha = 0.9;
+    const sw = 260 * S, sx = rnd(60, SHEET.w - 320) * S, sy = rnd(90, SHEET.h - 360) * S;
+    g.drawImage(sheetCanvas, sx, sy, sw, sw, rnd(-R, R * 0.2), rnd(-R, R * 0.2), R * 1.3, R * 1.3);
+    g.restore();
+  }
+  // facets
+  const pts = [...rim, ...Array.from({ length: 9 }, () => [rnd(-R, R) * 0.7, rnd(-R, R) * 0.7])];
+  for (let i = 0; i < 20; i++) {
+    const [a, b, d] = [0, 0, 0].map(() => pts[Math.floor(Math.random() * pts.length)]);
+    g.beginPath(); g.moveTo(...a); g.lineTo(...b); g.lineTo(...d); g.closePath();
+    g.fillStyle = Math.random() < 0.5 ? `rgba(255,252,240,${rnd(0.18, 0.5)})` : `rgba(96,76,46,${rnd(0.08, 0.26)})`;
+    g.fill();
+    g.strokeStyle = 'rgba(88,68,40,.22)'; g.lineWidth = 0.6; g.stroke();
+  }
+  // roundness
+  const rg = g.createRadialGradient(-R * 0.35, -R * 0.4, R * 0.1, 0, 0, R * 1.15);
+  rg.addColorStop(0, 'rgba(255,255,255,.28)'); rg.addColorStop(0.55, 'rgba(255,255,255,0)'); rg.addColorStop(1, 'rgba(40,26,10,.5)');
+  g.fillStyle = rg; g.fillRect(-size, -size, size * 2, size * 2);
+  g.restore();
+  g.strokeStyle = 'rgba(70,52,30,.35)'; g.lineWidth = 0.8;
+  g.beginPath(); rim.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.closePath(); g.stroke();
+  return c;
 }

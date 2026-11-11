@@ -59,7 +59,14 @@ body {
   width: 100%;
   height: 100%;
   overflow: visible;
+  /* above the paper, so a cup can be slid onto the letter; only the things themselves take the pointer */
+  z-index: 2;
+  pointer-events: none;
 }
+#desk-svg .grab, #desk-svg .clickable { pointer-events: auto; }
+.grab { cursor: grab; touch-action: none; }
+.grab.held { cursor: grabbing; filter: drop-shadow(14px 22px 12px rgba(0, 0, 0, .3)); }
+.grab .clickable { cursor: pointer; }
 
 .clickable { cursor: pointer; }
 .d-caption {
@@ -204,7 +211,40 @@ body[data-mode="writing"] #ticker { opacity: 1; transform: none; }
 .sheet canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .sheet canvas.wet { mix-blend-mode: multiply; }
 .sheet.incoming { transform: translate(40px, -960px) rotate(4deg); }
-.sheet.done { cursor: default; box-shadow: 2px 4px 10px rgba(0,0,0,.4); z-index: 0; }
+.sheet.done { cursor: grab; touch-action: none; box-shadow: 2px 4px 10px rgba(0,0,0,.4); z-index: 0; }
+.sheet.loose { transition: none; }
+.sheet.held { cursor: grabbing; box-shadow: 18px 30px 40px rgba(0,0,0,.4); }
+.sheet.reading { cursor: default; box-shadow: 2px 3px 4px rgba(0,0,0,.3), 20px 40px 80px rgba(0,0,0,.55); }
+.sheet.opening { transition: transform .75s cubic-bezier(.2,.8,.2,1), clip-path .75s ease-out; }
+.sheet.crumpling { transition: transform .19s ease-in, clip-path .19s ease-in; box-shadow: none; }
+
+/* a lifted corner: the sheet is cut along the fold and the flap is drawn over it */
+.sheet.curling { background: transparent; }
+.sheet.curling canvas { clip-path: var(--clip); }
+.curl { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; z-index: 55; display: none; }
+.corner { position: absolute; bottom: 0; width: 96px; height: 96px; z-index: 58; cursor: grab; touch-action: none; }
+.corner.br { right: 0; }
+.corner.bl { left: 0; }
+.corner:active { cursor: grabbing; }
+
+/* crumpled pages */
+.ball {
+  position: absolute; left: 0; top: 0; width: 84px; height: 84px; margin: -42px 0 0 -42px;
+  z-index: 5; cursor: grab; touch-action: none;
+  filter: drop-shadow(5px 8px 5px rgba(0, 0, 0, .45));
+}
+.ball canvas { display: block; width: 100%; height: 100%; }
+.ball.held { cursor: grabbing; filter: drop-shadow(13px 20px 10px rgba(0, 0, 0, .34)); }
+.ball:focus-visible { outline: 1px solid var(--gold); outline-offset: 2px; border-radius: 50%; }
+
+/* reading an old sheet: it comes up over the desk, and the desk falls back */
+#sheet-wrap::before {
+  content: ""; position: absolute; inset: -3000px; z-index: 70;
+  background: rgba(16, 9, 6, .55);
+  opacity: 0; pointer-events: none; transition: opacity .5s;
+}
+body.reading #sheet-wrap { z-index: 9; }
+body.reading #sheet-wrap::before { opacity: 1; pointer-events: auto; }
 
 #bunchin {
   position: absolute;
@@ -473,3 +513,52 @@ body[data-mode="idle"] #inkstat { opacity: 0; }
 #about-close { all: unset; position: absolute; top: 14px; right: 20px; cursor: pointer; font-size: 12px; color: #80654c; }
 #about-close:focus-visible { outline: 1px solid #937153; outline-offset: 4px; }
 @media (max-width: 650px) { #about { padding: 42px 26px 22px; font-size: 14px; } #about h2 { font-size: 28px; } }
+
+/* ───────────── reading an old sheet ───────────── */
+
+#reader {
+  position: fixed; left: 50%; bottom: calc(var(--kb, 0px) + 22px); z-index: 41;
+  transform: translateX(-50%) translateY(10px);
+  display: flex; gap: 6px; padding: 6px;
+  border-radius: 999px;
+  background: rgba(22, 13, 9, .86);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 8px 24px rgba(0,0,0,.4), inset 0 0 0 1px rgba(255,255,255,.09);
+  opacity: 0; pointer-events: none;
+  transition: opacity .4s, transform .4s;
+}
+body.reading #reader { opacity: 1; pointer-events: auto; transform: translateX(-50%); }
+#reader button {
+  all: unset; cursor: pointer;
+  padding: 9px 18px; border-radius: 999px;
+  font-size: 14px; letter-spacing: .05em; color: rgba(239, 230, 210, .82); white-space: nowrap;
+  transition: background .2s, color .2s;
+}
+#reader button:hover { background: rgba(239, 230, 210, .12); color: #fff; }
+#reader button:focus-visible { outline: 1px solid var(--gold); }
+body.reading #bar, body.reading #hint, body.reading.closeup #ticker { opacity: 0; pointer-events: none; }
+
+/* ───────────── a phone ───────────── */
+
+/* Writing on a phone is done close up: the sheet fills the width and the tape stays pinned above it. */
+#step-back {
+  all: unset; display: none; cursor: pointer;
+  padding: 8px 14px; border-radius: 4px;
+  font-size: 15px; letter-spacing: .12em; color: rgba(239, 230, 210, .85);
+  box-shadow: inset 0 0 0 1px rgba(181, 141, 59, .45);
+}
+#step-back:focus-visible { outline: 1px solid var(--gold); outline-offset: 3px; }
+body.closeup #step-back { display: block; }
+body.closeup .tk-right { display: none; }
+body.closeup #title { opacity: 0; pointer-events: none; }
+#title { transition: opacity .4s; }
+body.closeup #ticker { transition: opacity .7s; z-index: 10; }
+body.phone #input { top: 34%; bottom: auto; }
+#bar { bottom: var(--kb, 0px); pointer-events: none; }      /* only the controls themselves take the pointer; the page's corners lie under this strip */
+#bar .bar-left, #bar .bar-right { pointer-events: auto; }
+#hint { margin-bottom: var(--kb, 0px); }
+/* with the keyboard up, the controls ride just above it in one row */
+body.keys #bar { flex-wrap: nowrap; padding: 8px 6px; gap: 0; background: rgba(20, 12, 8, .9); }
+body.keys #bar .bar-right { display: none; }
+body.keys #bar button { margin: 0 6px; font-size: 11px; }
+body.keys #hint { bottom: 46px; }

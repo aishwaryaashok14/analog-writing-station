@@ -9,6 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@400;500;700&family=Special+Elite&display=swap" rel="stylesheet">
+<link rel="preload" href="fonts/LaBelleAurore.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body data-mode="idle">
@@ -62,38 +63,54 @@
     </defs>
 
     <!-- tea -->
-    <g id="d-tea" filter="url(#sh)">
-      <rect x="198" y="168" width="174" height="174" rx="10" fill="#1d130d"/>
-      <rect x="203" y="173" width="164" height="164" rx="7" fill="#2c1d14" stroke="#3b281c"/>
+    <g id="d-coaster" class="grab">
+      <title>Coaster</title>
+      <g id="d-tea" filter="url(#sh)">
+        <rect x="198" y="168" width="174" height="174" rx="10" fill="#1d130d"/>
+        <rect x="203" y="173" width="164" height="164" rx="7" fill="#2c1d14" stroke="#3b281c"/>
+      </g>
     </g>
-    <g filter="url(#shSoft)">
-      <circle cx="285" cy="255" r="63" fill="url(#gCup)"/>
-      <circle cx="285" cy="255" r="61" fill="none" stroke="rgba(255,255,255,.14)" stroke-width="1.5"/>
-    </g>
-    <circle cx="285" cy="255" r="51" fill="url(#gTea)"/>
-    <circle cx="285" cy="255" r="51" fill="none" stroke="rgba(0,0,0,.4)" stroke-width="5"/>
-    <path d="M254,236 Q268,222 290,220" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="3" stroke-linecap="round"/>
-    <path d="M297,268 l9,-3" stroke="#3f4a17" stroke-width="2" stroke-linecap="round"/>
-    <g class="steam" filter="url(#blur6)">
-      <path d="M262,262 q14,-24 0,-46 q-12,-22 4,-44" />
-      <path d="M290,268 q-14,-22 2,-44 q12,-20 -2,-42" />
-      <path d="M312,258 q12,-20 -2,-40 q-10,-18 4,-38" />
+    <g id="d-cup" class="grab">
+      <title>A cup of tea</title>
+      <g filter="url(#shSoft)">
+        <circle cx="285" cy="255" r="63" fill="url(#gCup)"/>
+        <circle cx="285" cy="255" r="61" fill="none" stroke="rgba(255,255,255,.14)" stroke-width="1.5"/>
+      </g>
+      <clipPath id="cTea"><circle cx="285" cy="255" r="51"/></clipPath>
+      <circle cx="285" cy="255" r="51" fill="url(#gTea)"/>
+      <g clip-path="url(#cTea)">
+        <g id="d-tea-shine">
+          <path d="M254,236 Q268,222 290,220" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="3" stroke-linecap="round"/>
+          <path d="M297,268 l9,-3" stroke="#3f4a17" stroke-width="2" stroke-linecap="round"/>
+          <circle id="d-tea-tilt" cx="285" cy="255" r="58" fill="none" stroke="rgba(40,48,12,.5)" stroke-width="14"/>
+        </g>
+      </g>
+      <circle cx="285" cy="255" r="51" fill="none" stroke="rgba(0,0,0,.4)" stroke-width="5"/>
+      <g class="steam" filter="url(#blur6)">
+        <path d="M262,262 q14,-24 0,-46 q-12,-22 4,-44" />
+        <path d="M290,268 q-14,-22 2,-44 q12,-20 -2,-42" />
+        <path d="M312,258 q12,-20 -2,-40 q-10,-18 4,-38" />
+      </g>
     </g>
 
     <!-- vermilion pad & seal -->
     <g id="d-hanko" class="clickable" data-tip="Stamp your letter · 文 means writing">
       <title>Writer's seal · 文 means writing</title>
-      <g filter="url(#sh)">
-        <circle cx="235" cy="835" r="56" fill="#15100d"/>
-        <circle cx="235" cy="835" r="55" fill="none" stroke="#b58d3b" stroke-width="1.2" opacity=".7"/>
+      <g id="d-pad" class="grab">
+        <g filter="url(#sh)">
+          <circle cx="235" cy="835" r="56" fill="#15100d"/>
+          <circle cx="235" cy="835" r="55" fill="none" stroke="#b58d3b" stroke-width="1.2" opacity=".7"/>
+        </g>
+        <circle cx="235" cy="835" r="44" fill="url(#gPad)"/>
+        <circle cx="235" cy="835" r="44" fill="none" stroke="rgba(0,0,0,.35)" stroke-width="4"/>
       </g>
-      <circle cx="235" cy="835" r="44" fill="url(#gPad)"/>
-      <circle cx="235" cy="835" r="44" fill="none" stroke="rgba(0,0,0,.35)" stroke-width="4"/>
-      <g id="d-seal" filter="url(#shSoft)" transform="rotate(-24 360 800)">
-        <rect x="306" y="786" width="112" height="28" rx="13" fill="url(#gBox)"/>
-        <rect x="306" y="786" width="13" height="28" rx="6" fill="#b3372a"/>
-        <rect x="324" y="790" width="84" height="4" rx="2" fill="#fff" opacity=".28"/>
-        <circle cx="398" cy="800" r="2.5" fill="#7a5a2a"/>
+      <g id="d-seal-body" class="grab">
+        <g id="d-seal" filter="url(#shSoft)" transform="rotate(-24 360 800)">
+          <rect x="306" y="786" width="112" height="28" rx="13" fill="url(#gBox)"/>
+          <rect x="306" y="786" width="13" height="28" rx="6" fill="#b3372a"/>
+          <rect x="324" y="790" width="84" height="4" rx="2" fill="#fff" opacity=".28"/>
+          <circle cx="398" cy="800" r="2.5" fill="#7a5a2a"/>
+        </g>
       </g>
     </g>
 
@@ -127,6 +144,7 @@
     <text id="pen-caption" x="1230" y="720" class="d-caption pen-caption" text-anchor="middle">take the pen</text>
 
     <!-- ink box -->
+    <g id="d-inkbox" class="grab">
     <g filter="url(#sh)">
       <rect x="1318" y="190" width="212" height="212" rx="7" fill="url(#gKiri)"/>
     </g>
@@ -135,14 +153,18 @@
     <path d="M1424,200 V392 M1328,296 H1520" stroke="#c9b086" stroke-width="6"/>
     <g id="d-inks"></g>
     <text x="1424" y="428" class="d-caption" text-anchor="middle">bottled ink</text>
+    </g>
 
     <!-- wiping cloth -->
+    <g id="d-cloth" class="grab">
+    <title>Wiping cloth</title>
     <g filter="url(#sh)">
       <path d="M1338,486 C1380,478 1470,480 1512,488 C1518,530 1516,590 1510,624 C1470,632 1380,630 1340,622 C1332,584 1332,524 1338,486 Z" fill="#ece4d2"/>
     </g>
     <path d="M1349,497 C1388,490 1464,492 1501,499 C1506,535 1504,582 1499,613 C1462,620 1388,618 1351,611 C1344,578 1344,530 1349,497 Z" fill="none" stroke="#31507e" stroke-width="1.6" stroke-dasharray="7 5" opacity=".75"/>
     <path d="M1342,554 C1400,548 1460,550 1512,556" fill="none" stroke="rgba(0,0,0,.09)" stroke-width="2"/>
     <g id="d-stains" filter="url(#blur3)"></g>
+    </g>
   </svg>
 
   <!-- title -->
@@ -157,14 +179,15 @@
   <div id="pile"></div>
 
   <!-- the draft tape: what you type passes here before the pen writes it -->
-  <div id="ticker" aria-hidden="true">
-    <span class="tk-label">draft</span>
-    <div class="tk-window">
+  <div id="ticker">
+    <span class="tk-label" aria-hidden="true">draft</span>
+    <div class="tk-window" aria-hidden="true">
       <div class="tk-tape" id="tape"></div>
       <span class="tk-ghost" id="tape-ghost">begin typing…</span>
       <i class="tk-head"></i>
     </div>
-    <span class="tk-label tk-right">ink follows</span>
+    <span class="tk-label tk-right" aria-hidden="true">ink follows</span>
+    <button id="step-back" type="button" title="Step back and see the whole desk">desk</button>
   </div>
 
   <!-- paper -->
@@ -396,6 +419,12 @@
   <p class="about-maker">Made by <a href="https://twitter.com/aishashok14" target="_blank" rel="noopener noreferrer">@aishashok14 ↗</a></p>
 </dialog>
 
+<!-- an old sheet, brought back up to read -->
+<div id="reader" role="group" aria-label="This sheet">
+  <button data-read="back" type="button">put it back</button>
+  <button data-read="crumple" type="button">crumple it</button>
+</div>
+
 <!-- hint -->
 <div id="hint" role="status" aria-live="polite"><b></b><span></span></div>
 
@@ -403,6 +432,7 @@
 <nav id="bar">
   <div class="bar-left">
     <button data-act="sheet"  type="button" title="New sheet">new sheet</button>
+    <button data-act="crumple" type="button" title="Crumple this sheet into a ball. You can open it again later.">crumple</button>
     <button data-act="stamp"  type="button" title="Writer’s seal · 文 means writing">stamp</button>
     <button data-act="refill" type="button" title="Refill the pen">refill</button>
     <button data-act="save"   type="button" title="Save as image">save image</button>
