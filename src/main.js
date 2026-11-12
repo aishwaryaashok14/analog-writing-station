@@ -1,7 +1,8 @@
 import { audio } from './audio.js';
-import { createWriter, SHEET } from './paper.js';
+import { createWriter, SHEET, crease, ballOf } from './paper.js';
 import { createRitual } from './ritual.js';
 import { createRecap } from './recap.js';
+import { createDesk, createCurl, sheetTransform, crush, PAGE } from './desk.js';
 
 const $ = (s) => document.querySelector(s);
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -19,7 +20,13 @@ const INKS = {
 const PAPER = { x: 490, y: 150 };        // where the sheet sits on the stage
 const SEAL = '文';
 
-const state = { mode: 'idle', ink: 'ai', sound: true, rain: false, sheets: [], swapping: false, stamping: false, typed: false, prepared: false };
+const state = {
+  mode: 'idle', ink: 'ai', sound: true, rain: false, typed: false, prepared: false,
+  sheets: [],            // every sheet set aside: { el, canvas, text, crumpled, body, ball }
+  swapping: false, stamping: false,
+  reading: null,         // the old sheet brought up to read, if any
+  near: false,           // on a phone: leaning in over the page, rather than seeing the whole desk
+};
 
 const stage = $('#stage');
 const wrap = $('#sheet-wrap');
@@ -29,21 +36,64 @@ const penEl = $('#pen-top');
 let sheetEl = null;
 let recap = null;
 
-/* ───────────── stage fit ───────────── */
+/* ───────────── the view ───────────── */
 
-function fit() {
-  const vw = innerWidth, vh = innerHeight;
-  let s = Math.min(vw / 1600, vh / 1000), shift = 0;
-  if (vw / vh < 1.45) {
+// The desk is a fixed 1600 × 1000 stage seen through a camera. On a wide screen the camera
+// simply fits it. On a phone it shows the desk from further back, then leans in over the
+// page to write: the sheet fills the width, the handwriting is larger, and the line being
+// written is kept clear of the keyboard.
+
+const docEl = document.documentElement;
+const vv = window.visualViewport;
+const ticker = $('#ticker');
+const TICKER_TOP = 85;                   // its place on the stage in the narrow layout (see styles)
+const cam = { s: 1, x: 0, y: 0, set: false, css: '', tk: '', kb: -1, last: 0 };
+
+const isPhone = () => docEl.clientWidth < 700;
+const handScale = () => (isPhone() ? 1.3 : 1);
+
+function aim(leanIn = true) {
+  const vw = docEl.clientWidth, vh = docEl.clientHeight;
+  const top = vv ? vv.offsetTop : 0, seen = vv ? vv.height : vh;
+  const phone = isPhone();
+  const close = leanIn && phone && (!!state.reading || (state.mode === 'writing' && state.near));
+  let s = Math.min(vw / 1600, vh / 1000), x = 0, y = 0;
+  if (close) {
+    s = (vw - 20) / PAGE.w;
+    const head = top + 10 + 60 * s;                              // the tape sits at the top of what is visible, the sheet just under it
+    const line = state.reading ? 0 : writer.lineY;
+    const paperTop = Math.min(head, top + seen * 0.56 - line * s);
+    y = (paperTop - vh / 2) / s - (PAGE.y - 500);
+  } else if (vw / vh < 1.45) {
     // narrow window: keep the paper and the pen tray, let the rest fall off the edges
     s = Math.min(vh / 1000, vw / 900);
-    shift = -Math.min(80, Math.max(0, (1600 * s - vw) / 2 / s));
+    x = -Math.min(80, Math.max(0, (1600 * s - vw) / 2 / s));
   }
-  stage.style.setProperty('--s', s.toFixed(4));
-  stage.style.setProperty('--shift', `${shift.toFixed(1)}px`);
+  return { s, x, y, phone, close, top, vw, vh, kb: Math.max(0, vh - top - seen) };
 }
-addEventListener('resize', fit);
-fit();
+
+// what part of the stage a camera position shows
+function seenBy(c) {
+  const vw = docEl.clientWidth, vh = docEl.clientHeight;
+  return { l: 800 - c.x - vw / (2 * c.s), r: 800 - c.x + vw / (2 * c.s), t: 500 - c.y - vh / (2 * c.s), b: 500 - c.y + vh / (2 * c.s) };
+}
+
+function look(now) {
+  const t = aim();
+  const k = cam.set ? 1 - Math.exp(-Math.min(60, now - cam.last) / 150) : 1;
+  cam.last = now; cam.set = true;
+  cam.s += (t.s - cam.s) * k; cam.x += (t.x - cam.x) * k; cam.y += (t.y - cam.y) * k;
+  const css = `translate(-50%, -50%) scale(${cam.s.toFixed(4)}) translate(${cam.x.toFixed(1)}px, ${cam.y.toFixed(1)}px)`;
+  if (css !== cam.css) stage.style.transform = cam.css = css;
+  const tk = t.close ? `translateY(${((t.top + 8 - t.vh / 2) / cam.s + 500 - cam.y - TICKER_TOP).toFixed(1)}px)` : '';
+  if (tk !== cam.tk) ticker.style.transform = cam.tk = tk;
+  const kb = Math.round(t.kb);
+  if (kb !== cam.kb) { cam.kb = kb; docEl.style.setProperty('--kb', `${kb}px`); document.body.classList.toggle('keys', kb > 80); }
+  document.body.classList.toggle('phone', t.phone);
+  document.body.classList.toggle('closeup', t.close);
+  requestAnimationFrame(look);
+}
+look(performance.now());
 
 function setMode(m) {
   state.mode = m;
@@ -197,8 +247,16 @@ function makeSheet(incoming) {
   el.className = 'sheet' + (incoming ? ' incoming' : '');
   el.style.zIndex = 50;
   wrap.insertBefore(el, bunchin);
-  writer.attach(el);
-  el.addEventListener('pointerdown', (e) => { if (state.mode === 'writing') { e.preventDefault(); focusInput(); } });
+  writer.attach(el, handScale());
+  // touching the page is how you lean in and write (on a phone this is also what raises the keyboard)
+  const lean = (e) => {
+    if (el.classList.contains('done') || state.mode !== 'writing' || state.reading) return;
+    if (e.type === 'pointerdown') e.preventDefault();
+    state.near = true;
+    focusInput();
+  };
+  el.addEventListener('pointerdown', lean);
+  el.addEventListener('click', lean);
   return el;
 }
 
@@ -213,7 +271,7 @@ function focusInput() {
 }
 
 function sync() {
-  if (composing || state.mode !== 'writing') return;
+  if (composing || state.mode !== 'writing' || state.reading) return;
   const v = ta.value;
   let i = 0;
   const n = Math.min(v.length, prev.length);
@@ -232,6 +290,7 @@ ta.addEventListener('compositionend', () => { composing = false; sync(); });
 
 addEventListener('keydown', (e) => {
   if ($('#about').open) return;
+  if (state.reading) { if (e.key === 'Escape') { e.preventDefault(); closeReader('back'); } return; }
   if (e.target.closest('button, [role="button"]')) return;
   if (state.mode === 'idle') {
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); takePen(); }
@@ -273,10 +332,12 @@ async function prepare(opts) {
   writer.setInk(INKS[res.inkId].c, res.level);
   addStain(res.inkId);
   setMode('writing');
+  state.near = true;
+  await document.fonts.load('28px "La Belle Aurore"').catch(() => {});     // never let the first words fall back to another face
   writer.start();
   writer.resume();
   focusInput();
-  if (!state.typed) hint('', 'Start typing. Click or drag the cap when you are done.', 9000);
+  if (!state.typed) hint('', touch ? 'Tap the page and start typing.' : 'Start typing. Click or drag the cap when you are done.', 9000);
 }
 
 function takePen() {
@@ -287,6 +348,7 @@ function takePen() {
   if (state.prepared && writer.level > 0) {
     audio.pop();
     setMode('writing');
+    state.near = true;
     writer.resume();
     focusInput();
     hint('', 'Pick up where you left off', 2600);
@@ -315,7 +377,7 @@ penEl.addEventListener('keydown', (e) => {
 });
 recap = createRecap({
   stage, pen: penEl, cap: $('#d-pen-cap'), audio, hint,
-  canStart: () => state.mode === 'writing' && !state.swapping && !state.stamping && !$('#about').open,
+  canStart: () => state.mode === 'writing' && !state.swapping && !state.stamping && !state.reading && !$('#about').open,
   getPen: () => ({ x: 490 + disp.x - 5 * disp.lift, y: 150 + disp.y - 10 * disp.lift, a: disp.a, s: 1 }),
   onBegin() {
     setMode('handling');
@@ -333,22 +395,93 @@ $('#d-inks').addEventListener('click', (e) => {
   if (g) refill(g.dataset.ink);
 });
 
+/* ───────────── things on the desk ───────────── */
+
+const RAD = Math.PI / 180;
+const touch = matchMedia('(pointer: coarse)').matches;
+const desk = createDesk({ stage, audio });
+const handling = () => state.mode !== 'ritual' && !state.reading;
+
+// tea leans away from a shove and takes a moment to settle
+const tea = { x: 0, y: 0, vx: 0, vy: 0 };
+const shine = $('#d-tea-shine');
+function slosh(b, dt) {
+  const tx = clamp(-b.ax * 0.0035, -9, 9), ty = clamp(-b.ay * 0.0035, -9, 9);
+  tea.vx += ((tx - tea.x) * 120 - tea.vx * 5) * dt;
+  tea.vy += ((ty - tea.y) * 120 - tea.vy * 5) * dt;
+  tea.x += tea.vx * dt; tea.y += tea.vy * dt;
+  shine.setAttribute('transform', `translate(${tea.x.toFixed(2)} ${tea.y.toFixed(2)})`);
+  return Math.abs(tea.x) + Math.abs(tea.y) + Math.abs(tea.vx) + Math.abs(tea.vy) > 0.4;
+}
+
+const cup = desk.item($('#d-cup'), 285, 255, { radius: 63, follow: 16, friction: 9, lifts: 0.05, canGrab: handling, onStep: slosh, onGrab() { ride = null; } });
+let ride = null;       // the cup rides along when the coaster under it is moved
+desk.item($('#d-coaster'), 285, 255, {
+  radius: 87, inertia: 5200, follow: 24, lifts: 0, canGrab: handling,
+  onGrab(b) { ride = Math.hypot(cup.x - b.x, cup.y - b.y) < 55 ? { x: cup.x - b.x, y: cup.y - b.y } : null; },
+  onStep(b, dt) {
+    if (!ride) return false;
+    cup.x = b.x + ride.x; cup.y = b.y + ride.y; cup.ax = b.ax; cup.ay = b.ay;
+    const more = slosh(cup, dt);
+    cup.draw();
+    return more;
+  },
+});
+desk.item($('#d-inkbox'), 1424, 296, { radius: 110, inertia: 30000, follow: 10, friction: 10, lifts: 0, canGrab: handling });
+desk.item($('#d-cloth'), 1425, 555, { radius: 80, inertia: 2400, follow: 30, friction: 8, lifts: 0, canGrab: handling });
+const pad = desk.item($('#d-pad'), 235, 835, { radius: 56, follow: 18, lifts: 0, canGrab: handling });
+const sealBody = desk.item($('#d-seal-body'), 360, 800, {
+  radius: 50, inertia: 2600, follow: 26, canGrab: () => handling() && !state.stamping,
+  onDrop(b) {
+    // set down on the page, it stamps right there
+    const sx = b.x - PAGE.x, sy = b.y - PAGE.y;
+    if (sx > 34 && sx < PAGE.w - 34 && sy > 34 && sy < PAGE.h - 34) stampSeal([sx, sy]);
+  },
+});
+
 /* ───────────── sheets ───────────── */
 
-async function newSheet() {
-  if (state.swapping || state.mode !== 'writing') return;
+let zTop = 0;
+
+// where set-aside sheets and crumpled balls go, wherever this window leaves room for them
+function spots() {
+  const v = seenBy(aim(false));
+  const floor = v.b - 60 / aim(false).s;
+  if (v.l < 180) return { pile: { x: 275, y: 530 }, balls: [1190, 1500, 770, Math.min(920, floor)] };
+  // tall and narrow: the pile goes under the pen tray, the balls along the foot of the page
+  return { pile: { x: Math.min(1212, v.r - 118), y: 905 }, balls: [520, 900, 1012, Math.max(1014, Math.min(1050, floor - 60))] };
+}
+
+function pilePose() {
+  const n = state.sheets.length, p = spots().pile;
+  return { x: p.x + rnd(-14, 14) + (n % 5) * 3, y: p.y + rnd(-12, 12) - (n % 5) * 2, a: rnd(-9, -2) * RAD };
+}
+
+function toPile(rec, pose = pilePose()) {
+  rec.el.style.zIndex = ++zTop;
+  rec.el.style.transform = sheetTransform(pose);
+  rec.body = desk.sheet(rec.el, pose, {
+    canGrab: () => !state.reading && state.mode !== 'ritual',
+    onGrab() { rec.el.style.zIndex = ++zTop; },
+    onClick() { readSheet(rec); },
+  });
+}
+
+async function newSheet(fate = 'pile') {
+  if (state.swapping || state.mode !== 'writing' || state.reading) return;
   state.swapping = true;
   writer.pause();
-  audio.paper();
+  curl.clear();
   const old = sheetEl;
-  state.sheets.push({ canvas: writer.canvas, text: writer.text() });
+  const rec = { el: old, canvas: writer.canvas, text: writer.text(), crumpled: false, body: null, ball: null };
+  state.sheets.push(rec);
   bunchin.classList.add('up');
+  if (fate === 'pile') audio.paper();
   await sleep(260);
   old.classList.add('done');
   old.querySelector('.wet')?.remove();
-  const n = state.sheets.length;
-  old.style.zIndex = n;
-  old.style.transform = `translate(${-330 + rnd(-10, 10) + n * 3}px, ${236 + rnd(-10, 10) - n * 2}px) rotate(${rnd(-9, -2).toFixed(1)}deg) scale(.36)`;
+  if (fate === 'ball') await crumple(rec, { x: PAGE.x + PAGE.w / 2, y: PAGE.y + PAGE.h / 2 });
+  else toPile(rec);
   sheetEl = makeSheet(true);
   await sleep(80);
   sheetEl.classList.remove('incoming');
@@ -360,25 +493,131 @@ async function newSheet() {
   focusInput();
 }
 
+/* crumpling, and thinking better of it */
+
+async function crumple(rec, c) {
+  const el = rec.el;
+  audio.crumple();
+  rec.body?.remove();
+  rec.body = null;
+  el.classList.remove('loose', 'opening');
+  el.classList.add('crumpling');
+  el.style.clipPath = crush(0);
+  void el.offsetWidth;
+  const turn = rnd(-0.6, 0.6);
+  for (const [t, s] of [[0.35, 0.76], [0.7, 0.4], [1, 0.13]]) {       // three squeezes of the fist
+    el.style.clipPath = crush(t);
+    el.style.transform = sheetTransform({ x: c.x, y: c.y, a: turn * t }, s);
+    await sleep(190);
+  }
+  el.style.display = 'none';
+  el.classList.remove('crumpling', 'reading');
+  el.style.clipPath = '';
+  rec.crumpled = true;
+  rec.ball = desk.ball(ballOf(rec.canvas), c.x, c.y, { canGrab: () => !state.reading, onClick: () => openBall(rec) });
+  crease(rec.canvas);                                                   // the folds stay in the paper
+  const [x0, x1, y0, y1] = spots().balls;
+  const tx = rnd(x0, Math.max(x0, x1)), ty = rnd(y0, Math.max(y0, y1));
+  rec.ball.toss((tx - c.x) * 2.3, (ty - c.y) * 2.3);                    // enough of a flick to roll there
+}
+
+function openBall(rec) {
+  if (state.reading || state.swapping || recap?.active || state.mode === 'ritual' || state.mode === 'handling') return;
+  const at = { x: rec.ball.x, y: rec.ball.y, a: rnd(-0.6, 0.6) };
+  rec.ball.remove();
+  rec.ball = null;
+  rec.crumpled = false;
+  audio.crumple();
+  const el = rec.el;
+  el.classList.add('loose');
+  el.style.display = '';
+  el.style.clipPath = crush(1);
+  el.style.transform = sheetTransform(at, 0.13);
+  void el.offsetWidth;
+  el.classList.remove('loose');
+  el.classList.add('opening');
+  el.style.clipPath = crush(0);
+  toPile(rec);
+  readSheet(rec);
+  setTimeout(() => { el.classList.remove('opening'); el.style.clipPath = ''; }, 820);
+}
+
+/* an old sheet, brought back up */
+
+function readSheet(rec) {
+  if (state.reading || state.swapping || recap?.active || state.mode === 'ritual' || state.mode === 'handling') return;
+  state.reading = rec;
+  if (state.mode === 'writing') { writer.pause(); audio.scratch(0); lastScratch = 0; }
+  ta.blur();
+  ta.disabled = true;
+  hint();
+  document.body.classList.add('reading');
+  rec.el.classList.remove('loose');
+  rec.el.classList.add('reading');
+  rec.el.style.zIndex = 80;
+  rec.el.style.transform = 'translate(0px, -6px) rotate(0rad) scale(1)';
+  if (!rec.el.classList.contains('opening')) audio.paper();
+}
+
+let closing = false;
+async function closeReader(how) {
+  const rec = state.reading;
+  if (!rec || closing) return;
+  closing = true;
+  if (how === 'crumple') await crumple(rec, { x: PAGE.x + PAGE.w / 2, y: PAGE.y + PAGE.h / 2 - 6 });
+  else {
+    rec.el.classList.remove('reading');
+    rec.el.style.zIndex = ++zTop;
+    rec.el.style.transform = sheetTransform(rec.body);
+    audio.paper();
+  }
+  document.body.classList.remove('reading');
+  state.reading = null;
+  closing = false;
+  ta.disabled = state.mode !== 'writing';
+  if (state.mode === 'writing') { writer.resume(); focusInput(); }
+}
+
+$('#reader').addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (b) closeReader(b.dataset.read);
+});
+wrap.addEventListener('click', (e) => { if (e.target === wrap && state.reading) closeReader('back'); });
+
+// the lower corners of the page lift; pulled far enough, the sheet comes away
+const curl = createCurl({
+  wrap, point: desk.point, hint,
+  getSheet: () => (state.swapping || state.reading ? null : sheetEl),
+  canPull: () => state.mode === 'writing' && !state.swapping && !state.stamping,
+  onPull: () => newSheet(),
+});
+
 /* ───────────── seal ───────────── */
 
-async function stampSeal() {
-  if (state.stamping || state.swapping || state.mode !== 'writing') return;
+async function stampSeal(drop) {
+  if (state.stamping || state.swapping || state.mode !== 'writing' || state.reading) return;
   state.stamping = true;
   const fly = $('#hanko-fly'), seal = $('#d-seal');
-  const [sx, sy] = writer.stampPos();
-  const tx = PAPER.x + sx, ty = PAPER.y + sy;
+  const [sx, sy] = drop || writer.stampPos();
+  const tx = PAGE.x + sx, ty = PAGE.y + sy;
   const at = (x, y, s) => { fly.style.transform = `translate(${x}px, ${y}px) scale(${s})`; };
   fly.style.transition = 'none';
-  at(350, 800, 1.2);
+  if (drop) at(tx, ty, 1.25); else at(sealBody.x - 10, sealBody.y, 1.2);
   void fly.offsetWidth;
   fly.style.transition = '';
   fly.style.opacity = 1;
   seal.style.opacity = 0;
-  at(235, 835, 1);                       // a dab on the vermilion pad
-  await sleep(520);
-  at(tx, ty, 1.25);
-  await sleep(560);
+  if (drop) {
+    // carried here by hand; the seal's own place on the desk is where it goes back to
+    sealBody.x = 360; sealBody.y = 800; sealBody.a = 0; sealBody.vx = sealBody.vy = sealBody.va = 0;
+    sealBody.draw();
+    await sleep(120);
+  } else {
+    at(pad.x, pad.y, 1);                   // a dab on the vermilion pad
+    await sleep(520);
+    at(tx, ty, 1.25);
+    await sleep(560);
+  }
   fly.style.transitionDuration = '.13s';
   fly.classList.add('press');
   at(tx, ty, 1);
@@ -390,23 +629,26 @@ async function stampSeal() {
   at(tx, ty, 1.25);
   await sleep(160);
   fly.style.transitionDuration = '';
-  at(350, 800, 1.2);
+  at(sealBody.x - 10, sealBody.y, 1.2);
   await sleep(520);
   fly.style.opacity = 0;
   seal.style.opacity = 1;
   state.stamping = false;
   focusInput();
 }
-$('#d-hanko').addEventListener('click', stampSeal);
+$('#d-hanko').addEventListener('click', () => stampSeal());
 
 /* ───────────── keeping the letter ───────────── */
 
+// crumpled pages are out of the letter until they are opened again
+const kept = () => state.sheets.filter((s) => !s.crumpled);
+
 function allText() {
-  return [...state.sheets.map((s) => s.text), writer.text()].filter((t) => t.trim()).join('\n\n');
+  return [...kept().map((s) => s.text), writer.text()].filter((t) => t.trim()).join('\n\n');
 }
 
 function saveImage() {
-  const pages = [...state.sheets.map((s) => s.canvas), writer.canvas];
+  const pages = [...kept().map((s) => s.canvas), writer.canvas];
   const pw = pages[0].width, ph = pages[0].height, pad = 120;
   const c = document.createElement('canvas');
   c.width = pages.length * pw + (pages.length + 1) * pad;
@@ -458,6 +700,7 @@ $('#about-open').addEventListener('click', () => {
   about.showModal();
 });
 $('#about-close').addEventListener('click', () => about.close());
+$('#step-back').addEventListener('click', () => { state.near = false; ta.blur(); hint('', 'Tap the page to lean back in.', 3200); });
 about.addEventListener('click', (e) => {
   const r = about.getBoundingClientRect();
   if (e.target === about && (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom)) about.close();
@@ -471,6 +714,7 @@ $('#bar').addEventListener('click', (e) => {
   if (!b) return;
   const act = b.dataset.act;
   if (act === 'sheet') newSheet();
+  else if (act === 'crumple') newSheet('ball');
   else if (act === 'stamp') stampSeal();
   else if (act === 'refill') refill();
   else if (act === 'save') saveImage();
@@ -503,4 +747,4 @@ setMode('idle');
 hint('', 'Take the pen from its tray');
 
 // a handle for poking at things from the console
-window.fuzukue = { state, writer, takePen, capPen, refill, newSheet, stampSeal };
+window.fuzukue = { state, writer, takePen, capPen, refill, newSheet, stampSeal, readSheet, closeReader, openBall };

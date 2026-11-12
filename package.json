@@ -7,6 +7,6 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "test": "node --test tests/*.test.mjs",
-    "check": "node --check src/main.js && node --check src/paper.js && node --check src/ritual.js && node --check src/recap.js && node --check src/audio.js"
+    "check": "node --check src/main.js && node --check src/paper.js && node --check src/ritual.js && node --check src/recap.js && node --check src/desk.js && node --check src/audio.js"
   }
 }
